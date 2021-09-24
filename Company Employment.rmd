@@ -1,0 +1,437 @@
+---
+title: "Possible Gender Bias in Hiring, Promotion, and Salary"
+subtitle: "In Black Saber Software"
+author: "Report prepared for Black Saber Software by Apollo II"
+date: 2021-04-21
+lang: "en"
+output:
+  pdf_document:
+    template: report.tex
+    toc: true
+    toc_depth: 2
+titlepage: true
+titlepage-color: "E74747"
+titlepage-text-color: "FFFFFF"
+titlepage-rule-color: "FFFFFF"
+titlepage-rule-height: 2
+---
+
+```{r, message = FALSE, echo=FALSE, warning =FALSE}
+library(tidyverse)
+library(readr)
+library(dplyr)
+library(mgcv)
+library(lme4)
+library(kableExtra)
+library(stats)
+
+# this should supress all code and messages
+knitr::opts_chunk$set(include=FALSE)
+```
+
+
+
+
+```{r, warning=FALSE, echo=FALSE}
+#First just take a look at all the data my client provided
+
+current_em <- read_csv("data/black-saber-current-employees.csv")
+final_hires_newgrad_2020 <- read_csv("data/final-hires-newgrad_2020.csv")
+phase_1 <- read.csv("data/phase1-new-grad-applicants-2020.csv")
+phase_2 <- read.csv("data/phase2-new-grad-applicants-2020.csv")
+phase_3 <- read.csv("data/phase3-new-grad-applicants-2020.csv")
+
+```
+
+\newpage
+# Executive summary
+## Background and Aims
+This report is dedicated for Black Saber Software in response to their concerns about the fairness of their hiring process, salary distribution and chances of promotion. Although an employee's work ethic and skills should determine how far they can achieve in these three areas, men are often more favored and therefore can advance further in these three areas, due to the concern of gender inequality. Therefore, to address the fairness concern, this report will focus on uncovering whethere there is a gender bias in the hiring process (both the AI system and the interviewer), in the salary distribution, and for the opportunity for promotion.
+
+## Key findings
+* The AI system is pretty fair in terms of filtering out applicants from stage 2 to stage 3
+
+* The final hiring process do appear to favored men a little.
+
+* The salary distribution do appear to favored men.
+
+* The chance of promotion do appear to favored men.
+
+## Limitations
+
+* We understand that AI is used in the preliminary rounds of selection. The design has a limitation where men and women are the only gender options. This prevents people from LGBTQ background to make a selection and can affect the overall results of the hiring process. This is also ethical discriminant. And, the AI program may have its flaws because it is designed from the company's pre-existing data. This can limit applicant pool because many talented men and women might not fit the pre-existing hiring citerias (refer to figure 1). 
+
+* The current employees of Black Saber Software has a limitation where people might enter the company starting at different job positions. This can affect the chances and time of being promoted to next higher available position because openings can differ between senority and teams. And promotion is directly related to their annual salary, so salary is also limited (refer to figure 2).
+
+**Table** Number of promotons the current employees get during the time they are in Black Saber Software.
+![](images/example.png)
+
+**Figure 1** Number of applicants left in competition from phase 2 to phase 3, and to the final hiring decision, by gender. The horizontal axis represent the phase, the vertical axis represent number of applicants left in that phase, after being filtered from the previous stage. 
+
+
+**Figure 2.** Distribution of Salary across 9 role seniorities, by gender. The horizontal median line in the middle of the boxes represents the point separating the highest 50% salary from the lowest 50% (the middle value). The top of the box represents 75% and the bottom of the box 25% of the salary in the company. The lines and dots extending beyond the box give the full range of values, with more extreme values further away from the box.
+\newpage
+# Technical report
+
+## Introduction
+
+In accordance to the request by our client company, Black Saber Software, the goal of this report is to determine the fairness in the hiring process, salary distribution, and promotion opportunity. Specifically, this report will focus on uncovering any gender bias in these three areas mentioned by answering four research questions. We will be using the 5 datasets given by the Black Saber Software and create new variables from them in order to process on further statistical analysis.
+
+
+### Research questions
+
+* In the hiring process, is there any gender bias when advancing into phase 3 (interviewing phase)?
+
+* In the hiring process, did the interviewers have gender bias in the interviewing stage?
+
+* Among current employees, is there any gender bias in salary distribution?
+
+* Among current employees, is there any gender bias in the opportunity of getting promotion? 
+
+## Possible Gender Bias When Advancing to Phase 3
+
+```{r Data Wrangling 1}
+final_hires_newgrad_2020 <- final_hires_newgrad_2020 %>%
+  mutate(get_hired = rep(1))    #creating a variable indicating these people got hired
+
+phase_3 <- phase_3 %>%
+  mutate(to_phase_3 = rep(1))    #creating a variable indicating these people make it to phase 3
+
+sum_hiring_phase <- phase_2 %>%
+  left_join(phase_3, "applicant_id") %>%
+  left_join(final_hires_newgrad_2020, "applicant_id")
+
+sum_hiring_phase[is.na(sum_hiring_phase)] = 0
+
+```
+To answer this question, we combine the phase 2 to final hiring decision datasets into one summarized dataset because gender as a variable, is only included in the phase 2 dataset and we want to set gender as one of the predictor variable of the response variable --- whether getting into phase 3 in our first model. Further, in order to indicate the response variable, we first add a column with all entries of 1 to the phase 3 dataset and name it 'to_phase_3' to indicate applicants who process to phase 3 successfully, then bind it with the phase 2 dataset. We do the same procedure to combind this dataset and the final-hire dataset to form a summarized dataset. After that, we set all the unknown entries in the summarized dataset to 0. Thus, besides the preexisting variables that we are given by Black Saber Software, in the summarized dataset, we make two new binary variables:
+
+* to_phase_3: either 0 or 1; 0 indicates the applicant did not process to stage 3, 1 indicates the applicant processed to stage 3 successfully.
+
+* get_hired: either 0 or 1; 0 indicates the applicant was not hired after the interviews, 1 indicates the applicant was hired after the interviews.
+```{r Model 1, warning =FALSE}
+mod_1 <- glm(to_phase_3 ~ gender + as.factor(extracurriculars) + as.factor(work_experience) + technical_skills + writing_skills + leadership_presence + speaking_skills + gpa, family = binomial(link="logit"), data = sum_hiring_phase)
+
+summary(mod_1)
+exp(summary(mod_1)$coeff[,1])
+exp(confint(mod_1))
+```
+
+Based on this research question, we want to know whether gender is one of the deterministic factor in order to get into phase 3 in the hiring process. Therefore, our response variable for the model will be whether getting into stage 3 or not, which is indicated by our newly-created variable 'to_phase_3', which is a binary variable. The predictor variable that we think will contribute to the advancement to phase 3 are applicant's gender, extracurricular involvements, work experience, technical skill, writing skill, presence of leadership skill, speaking skill and gpa.
+
+Because the response variable is a binary variable, while the observations seem to be indepdent from each other, we decide to use generalized linear model with a logistic regression. 
+
+Based on our result, with other predictor variables being control, we have no evidence against that the odds of getting into stage 3 by being a women is equal to the odds of getting into stage 3 by being a men (_p_ = .48). On the other hand, according to our model, with other predictors being control, applicants who had higher writing skills, technical skills, leadership presence and speaking skills had higher odds of advancing to stage 3 (all _ps_ < .05). 
+
+We can conclude that the AI system is pretty fair.
+```{r Table and figure 1, warning=FALSE}
+mod1_estimate <- format(round(exp(summary(mod_1)$coeff[,1]), 2))
+mod1_estimate
+mod1_p <- format(summary(mod_1)$coeff[,4])
+mod1_p
+mod1_CI <- format(round(exp(confint(mod_1)),2))
+mod1_CI
+mod1_CI_pretty <- str_c("(", trimws(mod1_CI[,1]), ", ", mod1_CI[,2], ")")
+mod1_CI_pretty
+rownames_for_table <- c("Baseline odds", "Prefer not to say (gender)", "Woman", "Extracurriculars 2", "Work experience 1", "Work experience 2", "Technical skills", "Writing skills", "Leadership_presence", "Speaking skills", "GPA")
+colnames_for_table <- c("Estimate", "P-value", "95% CI")
+mod1_pretty_table <- cbind(mod1_estimate, mod1_p, mod1_CI_pretty)
+rownames(mod1_pretty_table) <- rownames_for_table
+colnames(mod1_pretty_table) <- colnames_for_table
+
+```
+
+```{r Table 1, warning =FALSE, include = TRUE, echo=FALSE}
+knitr::kable(mod1_pretty_table, align = c("r", "r"))
+```
+
+## Possible Gender Bias From Interview Stage to Hiring Decision
+```{r Data Wrangling 2}
+phase_3_to_hired <- sum_hiring_phase %>%
+  select(applicant_id,gender,interviewer_rating_1,interviewer_rating_2,get_hired) %>%
+  filter(interviewer_rating_1 != 0) 
+
+#make the phase_3_to_hired tidy
+phase_3_to_hired <- phase_3_to_hired %>%
+  pivot_longer(cols = "interviewer_rating_1":"interviewer_rating_2", names_to = "rater", values_to = "rating")
+```
+To adress this question, we will use whether getting hired at the end as a response variable, which is indicated by a newly-created variable 'get_hired' (mentioned above). As we only concern about the process from stage 3 to the hiring decision, we filter out only the information for the 22 applicants who were in stage 3 from the summarized dataset. After, we figure that the data is not tidy as rater should be one variable (as a random effect) and rating should be another variable. Therefore, we create a new variable to represent rater, consisting of interviewer 1 and interviewer 2, and another variable rating, consist of a numeric rating that is made by an interviewer.
+
+For our response variable, getting hired or not, we include gender, rating as our predictor variables. Since each interviewer has their own standard (might be more strict or less strict), we set rater as a random effect. In summary, out reponse variable is a binary variable, and we have a random effect, so we decide to use generalized linear mixed model with logistic regression.
+```{r Model 2, warning = FALSE}
+mod_2 <- glmer(get_hired ~ gender+ rating+ (1|rater), family = binomial(link = 'logit'), data = phase_3_to_hired)
+summary(mod_2)
+exp(summary(mod_2)$coeff[,1])
+exp(confint(mod_2))
+```
+According to the result of our model, although the interview rating is a determinstic factor to being hired from the interviewing stage (_p_ = .047), gender is another deterministic factor to being hired from the interviewing stage (_p_ = 0.003). From our model, being a women is approximately 8% less likely to get into the company than being a men.
+```{r table 2}
+mod2_estimate <- format(round(exp(summary(mod_2)$coeff[,1]), 2))
+mod2_estimate
+mod2_p <- format(round(summary(mod_2)$coeff[,4]))
+mod2_p
+mod2_CI <- format(round(exp(confint(mod_2)),2)[-1,])
+mod2_CI
+mod2_CI_pretty <- str_c("(", trimws(mod2_CI[,1]), ", ", mod2_CI[,2], ")")
+mod2_CI_pretty
+rownames_for_table <- c("Baseline odds", "Woman", "Rating")
+colnames_for_table <- c("Estimate", "P-value", "95% CI")
+mod2_pretty_table <- cbind(mod2_estimate, mod2_p, mod2_CI_pretty)
+rownames(mod2_pretty_table) <- rownames_for_table
+colnames(mod2_pretty_table) <- colnames_for_table
+
+```
+
+```{r table for model 2, include = TRUE, echo =FALSE}
+knitr::kable(mod2_pretty_table, align = c("r", "r"))
+```
+
+## Possible Gender Bias in Current Salary Distribution
+```{r Data Wranglig 3}
+current_em$salary <-as.numeric(gsub('[$,]', '', current_em$salary)) #change the salary into numeric variable
+```
+Since our question is about salary distribution, we set salary as a response variable in our model. We figure that the salary variable that is provided in the pre-exisitng is in currency, we transform the variable into numeric type.
+
+We think employee's gender, role seniority, team that they are in would contribute to their salary. Moreover, since the salary for different team would be different, and the salary variable consist of the salary of each employee over time, the observation is not independent, we set team and employee as two random effect.
+
+Our response variable is continuous, and we have random effects, so we decide to use linear mixed model.
+```{r Model 3}
+mod_3a <- lmer(salary~ gender + team+ role_seniority + (1|team) + (1|employee_id), data=current_em)
+summary(mod_3a)
+
+mod_3b <- lmer(salary~ gender + team + role_seniority + (1|team) + (1|employee_id) + (1|role_seniority:gender), data=current_em)
+summary(mod_3b)
+
+#run a test to see if which one is better
+lmtest::lrtest(mod_3a, mod_3b)
+
+#we think mod_3b is better
+
+#realize that salary is pretty right skewed, so we want to apply log-transformation to the salary
+hist(current_em$salary)
+
+mod_3c <- lmer(log(salary) ~ gender + team + role_seniority + (1|team) + (1|employee_id) + (1|role_seniority:gender), REML = F, data=current_em)
+summary(mod_3c)
+confint(mod_3c)
+anova(mod_3c)
+```
+
+We run three different linear mixed models. The first one consists of all the predictor variables mentioned above. Then, we figure that there might be an interaction effect of role seniority and gender on salary, so for our second model we add an interaction effect on role seniority and gender on top of our first model. Then we run a likelihood ratio test, we conclude that we have a strong evidence (_p_ < .05) Then we acknowledge that the distribution of salary is actually right-skewed, which violates the normal assumption of the linear mixed model. Therefore, we decide to apply log transformation to the salary variable to normalize it. Consequently, the third model that we run inherits all of the features from our second model, with an exception that we use log-salary as a predictor variable.
+
+Finally, we decide to use the third model as a finalized model to address question 3. From our model, it seems like the salary distribution do depends on the gender, specifically, with other predictors controlled, women's salary is 1- $e^{-0.56}$ = 1-0.95 $\approx$ 5% less than the average.   
+```{r table 3}
+mod3c_estimate <- format(round(summary(mod_3c)$coeff[,1],2))
+mod3c_estimate
+mod3c_CI <- format(round(confint(mod_3c),2)[-4:-1,],2)
+mod3c_CI
+mod3c_CI_pretty <- str_c("(", trimws(mod3c_CI[,1]), ", ", mod3c_CI[,2], ")")
+mod3c_CI_pretty
+rownames_for_table <- c("Intercept", "Prefer not to say (gender)", "Woman", "Team data", "Team design", "Team legal and financial", "Team marketing and sales", "Team operations", "Team people and talent", "Team software", "Entry-level", "Junior I", "Junior II", "Manager", "Senior I", "Senior II", "Senior III", "Vice president")
+colnames_for_table <- c("Estimate", "95% CI")
+mod3c_pretty_table <- cbind(mod3c_estimate, mod3c_CI_pretty)
+rownames(mod3c_pretty_table) <- rownames_for_table
+colnames(mod3c_pretty_table) <- colnames_for_table
+```
+
+```{r table for model 3, include=TRUE, echo = FALSE}
+knitr::kable(mod3c_pretty_table, align = c("r", "r"))
+```
+
+## Possible Gender Bias in Promotion Opportunity
+```{r Data Wrangling 4}
+#Adding a variable about promotion
+current_em <- current_em %>%
+  arrange(employee_id) %>%
+  mutate(employee_id = as.character(employee_id))
+
+promotion_info <- current_em %>% 
+  select(employee_id, role_seniority) %>%
+  group_by(employee_id) %>%
+  unique() %>%
+  mutate(number_of_promotion = (n()-1)) %>%
+  select(-role_seniority) %>%
+  unique()
+
+current_em <- current_em %>%
+  left_join(promotion_info, "employee_id")
+
+current_em <- current_em %>%
+  group_by(employee_id) %>%
+  mutate(q_in_company = n())
+```
+To address this question, we decide to use number of promotion as our response variable. This variable does not come from the pre-existing dataset that we were given, however, we can make inference by looking at the role seniority of an employee over time to calculate the number of promotion they get, that is, the number of unique roole seniority each employee has minus 1. In addition, we create a new varible to indicate number of quartar an employee have spent in the company, this variable will serve as an offset in the model we are about to run.
+
+Since our response variable works like a rate (i.e. number of promotion over financial quarters that a person spent in the company), we decide to use poisson regession. We think an emplyee's gender, presence of leadership skill relative to their role, productivity. Also, because team that they are in, and a specific financial quarter might have an impact on the chances of promotion, so we set team and financial quarter as random effects. In summary, we decide to use generalized linear mixed model with poisson regression because our response variable is in a rate and there are random effects. Moreover, we set quarter spent in the company as an offset because each emplyee has different time spent in a company.
+
+```{r Model 4, warning = FALSE}
+mod_4 <- glmer(number_of_promotion ~ gender + leadership_for_level + productivity + (1|team) + (1|financial_q), offset = q_in_company, family = poisson(link = "log"), nAGQ = 0, data=current_em)
+summary(mod_4)
+exp(summary(mod_4)$coeff[,1])
+
+```
+Based on our results, we can see that all of our proposed predictor variables do contribute to the variation in chances of promotion, including gender (all _ps_ < .05). More specifically, with all other predictors controlled, the chance of a woman getting a promotion is approximately 7% less than the chance of a man getting promotion.
+
+```{r table 4}
+mod4_estimate <- format(round(exp(summary(mod_4)$coeff[,1]), 2))
+mod4_estimate
+mod4_p <- format(summary(mod_4)$coeff[,4])
+mod4_p
+rownames_for_table <- c("Baseline Odds", "Prefer not to say (gender)", "Woman", "Leadership_for_level (Exceeds expectation)", "Leadership_for_level (Needs improvement)", "Productivity")
+colnames_for_table <- c("Estimate", "P-value")
+mod4_pretty_table <- cbind(mod4_estimate, mod4_p)
+rownames(mod4_pretty_table) <- rownames_for_table
+colnames(mod4_pretty_table) <- colnames_for_table
+```
+
+```{r table for model 4, include =TRUE, echo =FALSE}
+knitr::kable(mod4_pretty_table, align = c("r", "r"))
+```
+
+### Gender Distribution on each stage
+```{r}
+##distribution of phas
+
+##original gender distribution (people who make it to phase 2)
+sum_hiring_phase %>%
+  select(gender) %>%
+  ggplot(aes(x=gender))+
+  geom_bar()
+
+## distribution of gender who make it to phase 3
+sum_hiring_phase %>%
+  select(gender, to_phase_3) %>%
+  filter(to_phase_3 == 1) %>%
+  ggplot(aes(x = gender))+
+  geom_bar()
+ #man is two times as woman -but is does gender really have a higher effect on getting into phase 3 
+ #we can comment when we compare the current employee data and see whether it's the case that the AI use the current employee data including gender ratio to filter applicants
+
+##distribution of gender who make it to interview phase
+sum_hiring_phase %>%
+  select(gender, get_hired) %>%
+  filter(get_hired == 1) %>%
+  ggplot(aes(x=gender)) +
+  geom_bar()
+```
+
+
+
+## Discussion
+
+_In this section you will summarize your findings across all the research questions and discuss the strengths and limitations of your work. It doesn't have to be long, but keep in mind that often people will just skim the intro and the discussion of a document like this, so make sure it is useful as a semi-standalone section (doesn't have to be completely standalone like the executive summary)._
+
+### Strengths and limitations
+
+* Strengths:
+
+1. In our research question #3, we created two models (mod3a and mod3b). Model 3a includes all the predictor variables like gender, team, employee id, and role senority. Model 3b is based on top of model 3a, but just with the addition of an interaction variable between the gender and role senority. We then took the extra step to compare both models using the likelihood ratio test to find the better fitted model. 
+
+2. By applying the histogram function on everyone's salary in the company, we discovered that the salary data is pretty right-skewed. This is very reasonable in a real-world setting because the main proportion of salary should be leaning towards the lower range of spectrum while the higher salaries are rare at the higher range of spectrum. However, this affects our linear mixed modeling. But we fixed the issue by applying log transformations on our salary response variable. 
+
+* Limitations: 
+
+1. While doing data wrangling on our dataset to get our variables for our research question #4 on promotion. We discovered that role senority doesn't follow a correct bottom-to-top promotion sequence. For example, some employees may come in directly as directors or managers. But some employees may come in as an entry-level worker. Both employee's starting position is different. The problem is that the chances of an entry-level employee to get promoted is technically greater because there are more openings for junior I positions. Compared to an employee with a manager position, his chances of getting promoted to the director position is lower because the openings for director position is technically smaller. This also affects the time for each employee at different positions to get promoted. This creates uncertainty for our data analysis. 
+
+2. Another limitation/concern is towards the hiring process' AI algorithms. The phase I and phase II of the hiring process asks for each applicant's gender. However, we discovered that there are only two options man and woman. But in our review for the current employee dataset, we discovered that there are people who prefers not to say on their gender selection. This reflects that the AI algorithm is ethically discriminant and forces applicants who prefers not to say choose between man and woman. This creates bias and uncertainty to how gender plays a role in the fairness of the hiring process. 
+
+3. An additional concern we have towards the hiring process' AI algorithms is the fact that it is programmed based on the current employee's data. There might be certain bias with how the current employee is hired before and this bias carries over to the more modern AI algorithm. Also, Black Saber Software is a STEM company with predominantly more men than women, which means the AI algorithm also selects heavily on skills that men seems to do better in than women.  
+
+4. A limitation to our research question #4 modeling is the technical problem with the R-studio program. We cannot add more predictor variables than what we currently have because it kept giving warning messages and doesn't let us add more. This could potentially affect the completeness of our modeling. 
+
+\newpage
+# Consultant information
+## Consultant profiles
+
+*Complete this section with a brief bio for each member of your group. If you are completing the project individually, you only need to complete one for yourself. In that case, change the title of this section to 'Consultant profile' instead. Examples below. This section is only marked for completeness, clarity and professionalism, not 'truth' so you can write it as if we're a few years in the future. Put your current degree in as completed and/or add your first choice grad school program, whatever you like. What skills related skills would you most like to highlight? What job title do you want?*
+
+**Chang Sun**. Chang Sun is a senior consultant with Apollo II. He specializes in data visualization and data analysis. Chang earned his Honours Bachelor of Science, Economics and Statisitics Major, from the University of Toronto in 2021. 
+He is a hard-working and dedicated person
+
+**Jia Yin Luo**. Jia Yin is a senior consultant with Apollo II. She specialize in data modeling and data visualization. Jia Yin earned her Honoured Bachelor of Science, Majoring in Psychology and Statistics from the University of Toronto in 2021. She earned her Master of Science in data science from the University of British Columbia in 2023.
+
+## Code of ethical conduct
+
+1. Our company, Apollo II, ensures the collection of information from our clients to be strictly confidential and adheres to privacy laws set out by the Statistical Society of Canada. We will avoid any form of disclosure to any parties for any intent of personal benefit or gains without any written permission or authorization by our clients. 
+
+2. Our company, Apollo II, shall ensure that we will exercise the best care and diligence to our client's requests and needs. We shall uphold our promise to our clients by providing our utmost professional analytical knowledge without any limitations and holdbacks.  
+
+3. Our company, Apollo II, shall report any and all of our statistical sources, findings, limitations, and possible errors and biases. We shall provide any and all of our analytical procedural steps with meaningful and useful statistical tables, graphs, and models.
+
+
+```{r figure 1 for executive summary, include = TRUE, echo =FALSE}
+sum_hiring_phase <- sum_hiring_phase %>%
+  mutate(further_stage_a = ifelse(to_phase_3 == 0, "stage 2", "stage 3")) %>%
+  mutate(further_stage_b = ifelse(get_hired == 0, "stage 3", "get hired")) %>%
+  mutate(further_stage_b = ifelse(further_stage_a == "stage 2", "stage 2", further_stage_b)) %>%
+  mutate(further_stage_b = fct_relevel(further_stage_b, c("stage 2", "stage 3", "get hired")))
+
+
+figure_1 <- sum_hiring_phase %>%
+  ggplot(aes(x=further_stage_b, fill = gender))+
+  geom_bar(position = "dodge") +
+  labs(title = "Applications From Stage 2 to Getting Hired",
+       subtitle = "By gender",
+       caption = "Source: Black Saber Software\nGraph created by: Apollo II team")+
+  xlab("Hiring Process") +
+  ylab("Number of Applicants") +
+  scale_fill_discrete("Gender") +
+  theme_minimal() 
+figure_1  
+```
+
+
+
+```{r figure 2 for exective summary, include = TRUE, echo = FALSE}
+current_em <- current_em %>%
+  mutate(role_seniority = factor(role_seniority, levels = c("Entry-level","Junior I","Junior II","Senior I","Senior II","Senior III","Manager", "Director","Vice president"))) 
+
+current_em %>%
+  select(employee_id, gender,team,salary, role_seniority) %>%
+  unique() %>%
+  ggplot(aes(x=role_seniority, y=salary, color=gender)) +
+  geom_boxplot()+
+  labs(title = "Salary of Each Role",
+       subtitle = "By gender",
+       caption = "Source: Black Saber Software\nCreated by: Apollo II Team") +
+  xlab("Role Seniority")+
+  ylab("Salary ($)")+
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90),
+        legend.title = element_blank())
+
+```
+
+```{r table for the executive summary, include =TRUE, echo =FALSE}
+table_1 <- table(current_em$gender, current_em$number_of_promotion)
+table_2 <- kbl(table_1) %>%
+  add_header_above(c("Gender","Number of Promotion"=7))
+  
+#names(dimnames(table_1)) <- c("Gender", "Number of Promotions")
+table_2
+```
+
+```{r}
+if(!match("staplr", installed.packages()[,1], nomatch = FALSE))
+  {install.packages("staplr")}
+
+# Don't edit anything in this function
+prep_for_crowdmark <- function(pdf=NULL){
+  # Get the name of the file you're currently in. 
+  this_file <- rstudioapi::getSourceEditorContext()$path
+  pdf_name <- sub(".Rmd", ".pdf", sub('.*/', '', this_file))
+  
+  # Create a file called to_submit to put the individual files in
+  # This will be in the same folder as this file is saved
+  if(!match("to_submit", list.files(), nomatch = FALSE))
+    {dir.create("to_submit")}
+ 
+  # Split the files
+  if(is.null(pdf)){
+  staplr::split_pdf(pdf_name, output_directory = "to_submit", prefix = "page_")} else {
+    staplr::split_pdf(pdf, output_directory = "to_submit", prefix = "page_") 
+  }
+}
+
+prep_for_crowdmark()
+```
+
