@@ -1,2 +1,2 @@
-# Company-Employment
+# Company Employment Resume Filter
 University Course Project 
